@@ -33,6 +33,13 @@ __asm__(".weak_reference _OBJC_CLASS_$_NSURL");
 #import "Settings.h"
 
 @implementation NSURLRequest(NSHTTPURLRequest)
+@dynamic HTTPBody;
+@dynamic HTTPShouldHandleCookies;
+@dynamic HTTPMethod;
+@dynamic HTTPBodyStream;
+@dynamic HTTPShouldUsePipelining;
+@dynamic allHTTPHeaderFields;
+
 + (BOOL)allowsAnyHTTPSCertificateForHost:(NSString *)host
 {
     return YES; // Or whatever logic
@@ -228,7 +235,7 @@ static WebDavTransferManager *gInstance = NULL;
 
 - (void)connection:(NSURLConnection*)connection didReceiveResponse:(NSURLResponse*)response {
 
-    activeTransfer.statusCode = [ (NSHTTPURLResponse*)response statusCode];
+    activeTransfer.statusCode = (int)[ (NSHTTPURLResponse*)response statusCode];
     if (activeTransfer.statusCode >= 400 && activeTransfer.statusCode < 600) {
         activeTransfer.success = false;
     } else if (activeTransfer.statusCode == 302) {
@@ -247,14 +254,47 @@ static WebDavTransferManager *gInstance = NULL;
 
     SyncManager *mgr = [SyncManager instance];
     [mgr setProgressTotal:[self.fileSize intValue]];
-    [mgr setProgressCurrent:[data length]];
+    [mgr setProgressCurrent:(int)[data length]];
     [mgr updateStatus];
 }
 
 -(void)connection:(NSURLConnection*)connection didReceiveAuthenticationChallenge:(NSURLAuthenticationChallenge*)challenge {
     if ([challenge previousFailureCount] == 0) {
         if ([[challenge protectionSpace] authenticationMethod] == NSURLAuthenticationMethodServerTrust) {
-            [challenge.sender useCredential:[NSURLCredential credentialForTrust:challenge.protectionSpace.serverTrust] forAuthenticationChallenge:challenge];            
+            NSURLCredential *credential = [NSURLCredential credentialForTrust:challenge.protectionSpace.serverTrust];
+            [challenge.sender useCredential:credential forAuthenticationChallenge:challenge];
+
+            UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"SSL Handshake" message:@"Server Ceritificate could not be validated.\nWould you like to continiue?" preferredStyle:UIAlertControllerStyleAlert];
+
+            UIAlertAction* ok = [UIAlertAction actionWithTitle:@"Yes"
+                                                         style:UIAlertActionStyleDefault
+                                                       handler:^(UIAlertAction *action) {
+
+
+                                                           [challenge.sender continueWithoutCredentialForAuthenticationChallenge:challenge];
+
+                                                       }];
+
+            UIAlertAction* cancel = [UIAlertAction actionWithTitle:@"No" style:UIAlertActionStyleDefault
+                                                           handler:^(UIAlertAction * action) {
+                                                               [alertController dismissViewControllerAnimated:YES completion:nil];
+                                                           }];
+
+            [alertController addAction:ok];
+            [alertController addAction:cancel];
+
+            id rootViewController = [UIApplication sharedApplication].delegate.window.rootViewController;
+            if([rootViewController isKindOfClass:[UINavigationController class]])
+              {
+                rootViewController = ((UINavigationController *)rootViewController).viewControllers.firstObject;
+              }
+            if([rootViewController isKindOfClass:[UITabBarController class]])
+              {
+                rootViewController = ((UITabBarController *)rootViewController).selectedViewController;
+              }
+            [rootViewController presentViewController:alertController animated:YES completion:nil];
+
+
         }
         else {
             NSURLCredential *newCredential;
@@ -274,6 +314,7 @@ static WebDavTransferManager *gInstance = NULL;
 // In simulator on 4.x, the workaround for allowsAnyHTTPSCertificateForHost doesn't work,
 // so use this instead (along with the bit in didReceiveAuthenticationChallenge about NSURLAuthenticationMethodServerTrust.
 - (BOOL)connection:(NSURLConnection *)connection canAuthenticateAgainstProtectionSpace:(NSURLProtectionSpace *)protectionSpace {
+        // return [protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodServerTrust];
     return YES;
 }
 
@@ -312,7 +353,7 @@ static WebDavTransferManager *gInstance = NULL;
 }
 
 - (int)queueSize {
-    return [transfers count];
+    return (int)[transfers count];
 }
 
 - (void)abort {

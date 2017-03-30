@@ -74,10 +74,22 @@ NSString *EscapeHeadings(NSString *original) {
 void UpdateAppBadge() {
     int count = 0;
     if ([[Settings instance] appBadgeMode] == AppBadgeModeTotal) {
+
         count += [[[AppInstance() noteListController] navigationController].tabBarItem.badgeValue intValue];
         count += [[[AppInstance() rootOutlineController] navigationController].tabBarItem.badgeValue intValue];
+
+        // are you running on >= iOS8?
+        // Not necessary because we're starting with 8
+        // But safe is safe 🦄
+        if ([[UIApplication sharedApplication] respondsToSelector:@selector(registerUserNotificationSettings:)]) {
+            UIUserNotificationSettings *settings = [UIUserNotificationSettings settingsForTypes:(UIUserNotificationTypeBadge|UIUserNotificationTypeAlert|UIUserNotificationTypeSound) categories:nil];
+            [[UIApplication sharedApplication] registerUserNotificationSettings:settings];
+        }
+        [[UIApplication sharedApplication] setApplicationIconBadgeNumber:count];
     }
-    [UIApplication sharedApplication].applicationIconBadgeNumber = count;
+    else {
+        [[UIApplication sharedApplication] setApplicationIconBadgeNumber:0];
+    }
 }
 
 // http://stackoverflow.com/questions/2576356/how-does-one-get-ui-user-interface-idiom-to-work-with-iphone-os-sdk-3-2
@@ -111,6 +123,11 @@ NSString *ReadPossiblyEncryptedFile(NSString *filename, NSString **error) {
                 NSError *e;
                 NSString *ret = [NSString stringWithContentsOfFile:tmpFileName usedEncoding:&encoding error:&e];
 
+                if( ret == nil) {
+                  *error = @"Unable to encrypt file, please check your password";
+                  return nil;
+                }
+
                 DeleteFile(FileWithName(@"decrypted-file.org"));
                 
                return ret;
@@ -131,7 +148,7 @@ NSString *ReadPossiblyEncryptedFile(NSString *filename, NSString **error) {
 // From: http://stackoverflow.com/questions/652300/using-md5-hash-on-a-string-in-cocoa
 NSString *md5(unsigned char *bytes, size_t len) {
     unsigned char result[16];
-    CC_MD5( bytes, len, result );
+    CC_MD5( bytes, (unsigned int)len, result );
     return [NSString stringWithFormat:
             @"%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
             result[0], result[1], result[2], result[3], 
@@ -163,21 +180,21 @@ void ExtractKeyAndIVFromPassphrase(const char *pass,
 
     memcpy(tmpStr, pass, passLen);
     memcpy(tmpStr + passLen, &salt[0], SaltLen);
-    CC_MD5(tmpStr, passLen + SaltLen, lastKey);
+    CC_MD5(tmpStr, (unsigned int)passLen + SaltLen, lastKey);
     memcpy(key, lastKey, kCCKeySizeAES128);   
     //NSLog(@"key1: %@", md5(tmpStr, passLen + SaltLen));
           
     memcpy(tmpStr, key, kCCKeySizeAES128);
     memcpy(tmpStr + kCCKeySizeAES128, pass, passLen);
     memcpy(tmpStr + kCCKeySizeAES128 + passLen, &salt[0], SaltLen);
-    CC_MD5(tmpStr, kCCKeySizeAES128 + passLen + SaltLen, lastKey);
+    CC_MD5(tmpStr, kCCKeySizeAES128 + (unsigned int)passLen + SaltLen, lastKey);
     memcpy(key + kCCKeySizeAES128, lastKey, kCCKeySizeAES128);   
     //NSLog(@"key2: %@", md5(tmpStr, kCCKeySizeAES128 + passLen + SaltLen));
     
     memcpy(tmpStr, lastKey, kCCKeySizeAES128);
     memcpy(tmpStr + kCCKeySizeAES128, pass, passLen);
     memcpy(tmpStr + kCCKeySizeAES128 + passLen, &salt[0], SaltLen);
-    CC_MD5(tmpStr, kCCKeySizeAES128 + passLen + SaltLen, iv);
+    CC_MD5(tmpStr, kCCKeySizeAES128 + (unsigned int)passLen + SaltLen, iv);
     //NSLog(@"iv: %@", md5(tmpStr, kCCKeySizeAES128 + passLen + SaltLen));
 }
 
